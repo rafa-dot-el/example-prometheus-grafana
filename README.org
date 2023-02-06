@@ -1,0 +1,103 @@
+#+title: Example Prometheus + Grafana stack for Python
+
+[[./dashboard.png]]
+
+This repository hosts a complete example of monitoring stack using [[https://prometheus.io/][Prometheus]]
+and [[https://grafana.com/][Grafana]].
+
+* The Stack
+To start the application a simple =docker-compose up= will do. It will start all
+services along with exposing them locally. To access it use the port =3000= which
+is Grafana's port, the username and password are =admin/password= respectively.
+
+If you wish to change it, they are defined on the following environment variables:
+#+begin_src yaml
+environment:
+    - GF_SECURITY_ADMIN_USER=admin
+    - GF_SECURITY_ADMIN_PASSWORD=password
+#+end_src
+
+* Concepts
+The stack consists of three elements, a system which produces the metrics and is
+the target for the monitoring system, a visualization platform and a database.
+In the current setup, Prometheus is responsible for scrapping the data and
+storing it, while Grafana is responsible for querying the data from Prometheus
+and plotting the charts.
+
+** Prometheus
+Prometheus collects and stores its metrics as time series data, i.e. metrics
+information is stored with the timestamp at which it was recorded, alongside
+optional key-value pairs called labels.
+
+Scrapping is the process of collecting data, the monitored system exposes a
+given endpoint which will contain a well formatted [[https://openmetrics.io/][OpenMetrics]] text as response.
+This text is then parsed and inserted on Prometheus. This is a *Pull* based
+approach instead of a *Push* based approach like usually systems implement. This
+approach has a limitation, you can't import legacy data. The stored data has a
+timestamp associated with it based on the time of scrapping.
+
+*** Metric Types
+Prometheus has four metric types:
+
+ * Counter: A cumulative metric that represents a single monotonically
+   increasing counter whose value can only increase or be reset to zero on
+   restart. For example, you can use a counter to represent the number of
+   requests served, tasks completed, or errors. Do not use a counter to expose a
+   value that can decrease. For example, do not use a counter for the number of
+   currently running processes; instead use a gauge.
+ * Gauge: A metric that represents a single numerical value that can arbitrarily
+   go up and down. Gauges are typically used for measured values like
+   temperatures or current memory usage, but also "counts" that can go up and
+   down, like the number of concurrent requests.
+ * Histogram: samples observations (usually things like request duration or
+   response sizes) and counts them in configurable buckets. It also provides a
+   sum of all observed values. A histogram with a base metric name of =basename=
+   exposes multiple time series during a scrape:
+   * cumulative counters for the observation buckets, exposed as
+     =<basename>_bucket{le== ="<upper inclusive bound>"}=
+   * the total sum of all observed values, exposed as =<basename>_sum=
+   * the count of events that have been observed, exposed as =<basename>_count= (identical to =<basename>_bucket{le= =="+Inf"}= above)
+
+    Use the =histogram_quantile()= function to calculate quantiles from histograms
+    or even aggregations of histograms. A histogram is also suitable to calculate
+    an [[https://en.wikipedia.org/wiki/Apdex][Apdex score]]. When operating on buckets, remember that the histogram is
+    cumulative.
+
+ * Summary: similar to histogram, it also calculates configurable values over a
+   sliding time window.
+
+** Python Exporter
+Exporters are the components in the architecture that produces the data that
+Prometheus will consume. There is no need for using a dependency, but it its
+usage facilitates the development by creating an endpoint and collecting more
+metrics, as well giving an abstraction layer for metrics creation.
+
+#+begin_src toml
+[tool.poetry.dependencies]
+python = "^3.10"
+prometheus-client = "^0.15.0"
+Flask = "^2.2.2"
+#+end_src
+
+And then use it to create a simple counter with
+
+#+begin_src python
+REQUEST_COUNTER = Counter('request_counter', 'Number of requests received')
+#+end_src
+
+* Generating requests
+Bellow a simple bash script to loop infinitely making request in random
+intervals to =localhost:3031.=
+
+#+begin_src bash
+while true; do sleep $(( ( RANDOM % 10 )  + 1 )); curl localhost:3001; done;
+#+end_src
+
+The requests will show up on  the request dashboard soon after the command
+starts to execute.
+
+* References
+ * [[https://prometheus.io][Prometheus]]
+ * [[https://grafana.com/][Grafana]]
+ * [[https://github.com/prometheus/node_exporter][Prometheus Node Exporter]]
+ * [[https://github.com/prometheus/client_python][Prometheus Python Client]]
